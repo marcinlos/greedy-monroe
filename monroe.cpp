@@ -4,9 +4,8 @@
 #include <list>
 #include <iterator>
 #include <algorithm>
-#include <chrono>
-
 #include "elections.hpp"
+#include <omp.h>
 
 using std::vector;
 
@@ -98,6 +97,8 @@ int score(const candidate_data& c, int size)
 vector<voter_id> best_voters(const candidate_data& c, int size)
 {
     vector<voter_id> vs;
+    vs.reserve(size);
+
     auto it = begin(c.voters);
     for (int i = 0; i < size; ++ it, ++ i)
     {
@@ -118,34 +119,66 @@ committee find_committee(election_params p, vector<candidate_data>& candidates)
     const int to_cover = p.votes / p.committee;
     vector<bool> candidate_used(p.candidates, false);
 
+    double find_time = 0;
+    double remove_time = 0;
+
     for (int i = 0; i < p.committee; ++ i)
     {
         int max_score = 0;
         candidate_id best = -1;
-        for (int c = 0; c < p.candidates; ++ c)
+
+        double before = omp_get_wtime();
+
+        #pragma omp parallel
         {
-            if (! candidate_used[c])
+            int t_max_score = 0;
+            candidate_id t_best = -1;
+
+            #pragma omp for nowait
+            for (int c = 0; c < p.candidates; ++ c)
             {
-                int s = score(candidates[c], to_cover);
-                if (s > max_score)
+                if (! candidate_used[c])
                 {
-                    max_score = s;
-                    best = c;
+                    int s = score(candidates[c], to_cover);
+                    if (s > t_max_score)
+                    {
+                        t_max_score = s;
+                        t_best = c;
+                    }
+                }
+            }
+            #pragma omp critical
+            {
+                if (t_max_score > max_score)
+                {
+                    max_score = t_max_score;
+                    best = t_best;
                 }
             }
         }
+        double after = omp_get_wtime();
+        find_time += after - before;
         auto to_remove = best_voters(candidates[best], to_cover);
 
-        for (auto& c : candidates)
+        before = omp_get_wtime();
+
+        #pragma omp parallel for
+        for (int j = 0; j < p.candidates; ++ j)
         {
+            auto& c = candidates[j];
             for (voter_id v : to_remove)
             {
                 remove(c, v);
             }
         }
+        after = omp_get_wtime();
+        remove_time += after - before;
+
         candidate_used[best] = true;
         committee.push_back(best);
     }
+    std::cout << "Finding: " << find_time << std::endl;
+    std::cout << "Remove:  " << remove_time << std::endl;
     return committee;
 }
 
@@ -188,23 +221,20 @@ int main(int argc, char* argv[])
     election_params params;
     std::cin >> params.votes >> params.candidates >> params.committee;
 
-    auto t_before_read = std::chrono::high_resolution_clock::now();
+    auto before = omp_get_wtime();
     vote_list e = read_votes(params);
-    auto t_after_read = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> read_time = t_after_read - t_before_read;
-    std::cout << "Reading: " << read_time.count() << std::endl;
+    auto after = omp_get_wtime();
+    std::cout << "Reading: " << after - before << std::endl;
 
-    auto t_before_preprocessing = std::chrono::high_resolution_clock::now();
+    before = omp_get_wtime();
     auto candidates = preprocess(params, e);
-    auto t_after_preprocessing = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> preprocessing_time = t_after_preprocessing - t_before_preprocessing;
-    std::cout << "Preprocessing: " << preprocessing_time.count() << std::endl;
+    after = omp_get_wtime();
+    std::cout << "Preprocessing: " << after - before << std::endl;
 
-    auto t_before_loop = std::chrono::high_resolution_clock::now();
+    before = omp_get_wtime();
     auto committee = find_committee(params, candidates);
-    auto t_after_loop = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> loop_time = t_after_loop - t_before_loop;
-    std::cout << "Loop: " << loop_time.count() << std::endl;
+    after = omp_get_wtime();
+    std::cout << "Loop: " << after - before << std::endl;
 
     std::ofstream out("result");
     for (auto id : committee)
