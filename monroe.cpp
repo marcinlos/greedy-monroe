@@ -43,6 +43,7 @@ void print_candidates(const vector<candidate_data>& candidates, election_params 
 
 vector<candidate_data> preprocess(election_params p, const vote_list& votes)
 {
+    double before = omp_get_wtime();
     vector<candidate_data> candidates(p.candidates);
 
     using bucket_list = std::vector<voters_list>;
@@ -51,19 +52,48 @@ vector<candidate_data> preprocess(election_params p, const vote_list& votes)
     {
         b.resize(p.candidates);
     }
+    double after = omp_get_wtime();
+    double init_time = after - before;
 
-    for (int i = 0; i < p.votes; ++ i)
+    before = omp_get_wtime();
+    #pragma omp parallel
     {
-        const vote& v = votes[i];
-        for (int j = 0; j < p.candidates; ++ j)
+
+        vector<bucket_list> t_buckets(p.candidates);
+        for (bucket_list& b : t_buckets)
         {
-            int score = p.candidates - j - 1;
-            candidate_id c = v[j];
-            voter_entry voter{ i, score };
-            buckets[c][score].push_back(voter);
+            b.resize(p.candidates);
+        }
+
+        #pragma omp for
+        for (int i = 0; i < p.votes; ++ i)
+        {
+            const vote& v = votes[i];
+            for (int j = 0; j < p.candidates; ++ j)
+            {
+                int score = p.candidates - j - 1;
+                candidate_id c = v[j];
+                voter_entry voter{ i, score };
+                t_buckets[c][score].push_back(voter);
+            }
+        }
+
+        #pragma omp critical
+        {
+            for (int i = 0; i < p.candidates; ++ i)
+            {
+                for (int j = 0; j < p.candidates; ++ j)
+                {
+                    buckets[i][j].splice(begin(buckets[i][j]), t_buckets[i][j]);
+                }
+            }
         }
     }
+    after = omp_get_wtime();
+    double bucket_time = after - before;
 
+    before = omp_get_wtime();
+    #pragma omp parallel for
     for (int i = 0; i < p.candidates; ++ i)
     {
         candidate_data& c = candidates[i];
@@ -79,7 +109,12 @@ vector<candidate_data> preprocess(election_params p, const vote_list& votes)
             c.voter_positions[v] = it;
         }
     }
+    after = omp_get_wtime();
+    double merge_time = after - before;
 
+    std::cout << "  Init: " << init_time << std::endl;
+    std::cout << "  Bucket: " << bucket_time << std::endl;
+    std::cout << "  Merge: " << merge_time << std::endl;
     return candidates;
 }
 
@@ -177,8 +212,8 @@ committee find_committee(election_params p, vector<candidate_data>& candidates)
         candidate_used[best] = true;
         committee.push_back(best);
     }
-    std::cout << "Finding: " << find_time << std::endl;
-    std::cout << "Remove:  " << remove_time << std::endl;
+    std::cout << "  Finding: " << find_time << std::endl;
+    std::cout << "  Remove:  " << remove_time << std::endl;
     return committee;
 }
 
@@ -226,6 +261,7 @@ int main(int argc, char* argv[])
     auto after = omp_get_wtime();
     std::cout << "Reading: " << after - before << std::endl;
 
+    double before_all = omp_get_wtime();
     before = omp_get_wtime();
     auto candidates = preprocess(params, e);
     after = omp_get_wtime();
@@ -235,6 +271,9 @@ int main(int argc, char* argv[])
     auto committee = find_committee(params, candidates);
     after = omp_get_wtime();
     std::cout << "Loop: " << after - before << std::endl;
+    double after_all = omp_get_wtime();
+    std::cout << "Total: " << after_all - before_all << std::endl;
+
 
     std::ofstream out("result");
     for (auto id : committee)
