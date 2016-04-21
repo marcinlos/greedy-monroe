@@ -14,8 +14,7 @@ using vote = vector<candidate_id>;
 using vote_list = vector<vote>;
 using committee = vector<candidate_id>;
 
-struct election_params
-{
+struct election_params {
     int votes;
     int candidates;
     int committee;

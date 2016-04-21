@@ -5,20 +5,17 @@
 #include "elections.hpp"
 
 
-struct point
-{
+struct point {
     double x, y;
 };
 
-double dist(point a, point b)
-{
+double dist(point a, point b) {
     double dx = a.x - b.x;
     double dy = a.y - b.y;
     return dx * dx + dy * dy;
 }
 
-struct normal_distribution_2d
-{
+struct normal_distribution_2d {
     point center;
     std::normal_distribution<> dist_x;
     std::normal_distribution<> dist_y;
@@ -30,8 +27,7 @@ struct normal_distribution_2d
     { }
 
     template <typename Gen>
-    point operator ()(Gen& g)
-    {
+    point operator ()(Gen& g) {
         double x = dist_x(g);
         double y = dist_y(g);
         return { center.x + x, center.y + y };
@@ -40,30 +36,25 @@ struct normal_distribution_2d
 };
 
 template <typename Gen, typename Dist>
-vector<point> random_points(Gen& gen, Dist& dist, int n)
-{
+vector<point> random_points(Gen& gen, Dist& dist, int n) {
     vector<point> points;
-    for (int i = 0; i < n; ++ i)
-    {
+    for (int i = 0; i < n; ++ i) {
         points.push_back(dist(gen));
     }
     return points;
 }
 
-vote trivial_vote(int n)
-{
+vote trivial_vote(int n) {
     vote v(n);
     std::iota(begin(v), end(v), 0);
     return v;
 }
 
-vote_list create_votes(const vector<point>& candidates, const vector<point>& voters)
-{
+vote_list create_votes(const vector<point>& candidates, const vector<point>& voters) {
     vote_list votes;
     vote v = trivial_vote(candidates.size());
 
-    for (int i = 0; i < voters.size(); ++ i)
-    {
+    for (int i = 0; i < voters.size(); ++ i) {
         point x = voters[i];
         std::sort(begin(v), end(v), [x,&candidates](int i, int j) {
             return dist(x, candidates[i]) < dist(x, candidates[j]);
@@ -73,29 +64,28 @@ vote_list create_votes(const vector<point>& candidates, const vector<point>& vot
     return votes;
 }
 
-void print_election(const vote_list& e, election_params p, std::ostream& os)
-{
+void print_election(const vote_list& e, election_params p, std::ostream& os) {
     os << p.votes << ' ' << p.candidates << ' ' << p.committee << std::endl;
-    for (int i = 0; i < e.size(); ++ i)
-    {
-        for (auto v : e[i])
-        {
+    for (int i = 0; i < e.size(); ++ i) {
+        for (auto v : e[i]) {
             os << v << ' ';
         }
         os << std::endl;
     }
 }
 
-void print_points(const vector<point>& points, std::ostream& os)
-{
-    for (point p : points)
-    {
+void print_points(const vector<point>& points, std::ostream& os) {
+    for (point p : points) {
         os << p.x << " " << p.y << std::endl;
     }
 }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
+    if (argc < 3) {
+        std::cerr << "Usage: ./generator <votes> <candidates> <committee size>" << std::endl;
+        return -1;
+    }
+
     election_params params;
     params.votes = std::atoi(argv[1]);
     params.candidates = std::atoi(argv[2]);
