@@ -1,24 +1,15 @@
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <list>
 #include <iterator>
 #include <algorithm>
+#include <chrono>
+
+#include "elections.hpp"
 
 using std::vector;
 
-using voter_id = int;
-using candidate_id = int;
-
-using vote = vector<candidate_id>;
-using vote_list = vector<vote>;
-using committee = vector<candidate_id>;
-
-struct election_params
-{
-    int votes;
-    int candidates;
-    int committee;
-};
 
 struct voter_entry
 {
@@ -197,21 +188,28 @@ int main(int argc, char* argv[])
     election_params params;
     std::cin >> params.votes >> params.candidates >> params.committee;
 
-    std::cout << "Voters:     " << params.votes << std::endl;
-    std::cout << "Candidates: " << params.candidates << std::endl;
-    std::cout << "Committee:  " << params.committee << std::endl;
-
+    auto t_before_read = std::chrono::high_resolution_clock::now();
     vote_list e = read_votes(params);
-    // print_election(e);
+    auto t_after_read = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> read_time = t_after_read - t_before_read;
+    std::cout << "Reading: " << read_time.count() << std::endl;
 
+    auto t_before_preprocessing = std::chrono::high_resolution_clock::now();
     auto candidates = preprocess(params, e);
-    // print_candidates(candidates, params);
+    auto t_after_preprocessing = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> preprocessing_time = t_after_preprocessing - t_before_preprocessing;
+    std::cout << "Preprocessing: " << preprocessing_time.count() << std::endl;
 
+    auto t_before_loop = std::chrono::high_resolution_clock::now();
     auto committee = find_committee(params, candidates);
-    std::cout << "Committee: ";
+    auto t_after_loop = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> loop_time = t_after_loop - t_before_loop;
+    std::cout << "Loop: " << loop_time.count() << std::endl;
+
+    std::ofstream out("result");
     for (auto id : committee)
     {
-        std::cout << id << ' ';
+        out << id << std::endl;
     }
     std::cout << std::endl;
 }
